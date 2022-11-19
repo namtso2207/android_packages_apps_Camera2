@@ -613,12 +613,15 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void onQuickExpose() {
+        Log.d(TAG, "onQuickExpose===");
         mMainThread.execute(new Runnable() {
             @Override
             public void run() {
                 // Starts the short version of the capture animation UI.
                 mAppController.startFlashAnimation(true);
-                mMediaActionSound.play(MediaActionSound.SHUTTER_CLICK);
+                if (mSettingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
+                        Keys.KEY_CAMERA_SOUND))
+                    mMediaActionSound.play(MediaActionSound.SHUTTER_CLICK);
             }
         });
     }

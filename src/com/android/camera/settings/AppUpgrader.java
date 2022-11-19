@@ -198,6 +198,13 @@ public class AppUpgrader extends SettingsUpgrader {
                     Keys.KEY_EXPOSURE_COMPENSATION_ENABLED, manualExposureCompensationEnabled);
         }
 
+        if (defaultPreferences.contains(Keys.KEY_CAMERA_SOUND)) {
+            boolean cameraSoundEnabled = removeBoolean(defaultPreferences,
+                    Keys.KEY_CAMERA_SOUND);
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL,
+                    Keys.KEY_CAMERA_SOUND, cameraSoundEnabled);
+        }
+
         // Hint: boolean -> String, from default.
         if (defaultPreferences.contains(Keys.KEY_CAMERA_FIRST_USE_HINT_SHOWN)) {
             boolean hint = removeBoolean(defaultPreferences, Keys.KEY_CAMERA_FIRST_USE_HINT_SHOWN);

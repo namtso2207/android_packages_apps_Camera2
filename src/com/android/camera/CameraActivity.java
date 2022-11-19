@@ -532,6 +532,7 @@ public class CameraActivity extends QuickActivity
         }
         Log.v(TAG, "invoking onChangeCamera");
         mCameraAppUI.onChangeCamera();
+        syncCameraSoundSetting(camera);
     }
 
     private void resetExposureCompensationToDefault(CameraAgent.CameraProxy camera) {
@@ -2876,6 +2877,14 @@ public class CameraActivity extends QuickActivity
     @Override
     public void finishActivityWithIntentCanceled() {
         finishActivityWithIntentResult(Activity.RESULT_CANCELED, new Intent());
+    }
+
+    public void syncCameraSoundSetting(CameraAgent.CameraProxy camera) {
+        boolean soundOn = mSettingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
+                Keys.KEY_CAMERA_SOUND);
+        Log.i(TAG,"camera sound = " + soundOn);
+        if (camera != null)
+            camera.enableShutterSound(soundOn);
     }
 
     private void finishActivityWithIntentResult(int resultCode, Intent resultIntent) {

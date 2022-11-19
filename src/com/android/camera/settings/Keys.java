@@ -80,6 +80,9 @@ public class Keys {
     public static final String KEY_HDR_PLUS_FLASH_MODE = "pref_hdr_plus_flash_mode";
     public static final String KEY_SHOULD_SHOW_SETTINGS_BUTTON_CLING =
             "pref_should_show_settings_button_cling";
+
+    public static final String KEY_CAMERA_SOUND = "pref_camera_sound_enable_key";
+
     public static final String KEY_HAS_SEEN_PERMISSIONS_DIALOGS = "pref_has_seen_permissions_dialogs";
 
     /**
@@ -180,6 +183,18 @@ public class Keys {
 
         settingsManager.setDefaults(KEY_SHOULD_SHOW_SETTINGS_BUTTON_CLING, true);
 
+        settingsManager.setDefaults(KEY_CAMERA_SOUND, true);
+
+    }
+
+    /**
+     * Set the defined keys to defaults.
+     * It's not necessary to set all defaults.
+     */
+    public static void setToDefaults(SettingsManager settingsManager, Context context) {
+        if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_CAMERA_SOUND))
+            settingsManager.setToDefault(SettingsManager.SCOPE_GLOBAL,
+                KEY_CAMERA_SOUND);
     }
 
     /** Helper functions for some defined keys. */

@@ -153,6 +153,9 @@ public class CameraSettingsActivity extends FragmentActivity {
         // Selected resolutions for the different cameras and sizes.
         private PictureSizes mPictureSizes;
 
+        private SettingsManager mSettingsManager;
+        private ManagedSwitchPreference mCameraSound;
+
         @Override
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
@@ -205,6 +208,8 @@ public class CameraSettingsActivity extends FragmentActivity {
             // Make sure to hide settings for cameras that don't exist on this
             // device.
             setVisibilities();
+
+            mCameraSound = (ManagedSwitchPreference) findPreference(Keys.KEY_CAMERA_SOUND);
 
             // Put in the summaries for the currently set values.
             final PreferenceScreen resolutionScreen =
