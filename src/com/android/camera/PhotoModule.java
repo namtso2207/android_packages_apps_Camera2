@@ -46,6 +46,7 @@ import com.android.camera.app.MediaSaver;
 import com.android.camera.app.MemoryManager;
 import com.android.camera.app.MemoryManager.MemoryListener;
 import com.android.camera.app.MotionManager;
+import com.android.camera.debug.DebugPropertyHelper;
 import com.android.camera.debug.Log;
 import com.android.camera.exif.ExifInterface;
 import com.android.camera.exif.ExifTag;
@@ -109,6 +110,7 @@ public class PhotoModule
         CountDownView.OnCountDownStatusListener {
 
     private static final Log.Tag TAG = new Log.Tag("PhotoModule");
+    private final boolean DEBUG = true;
 
     // We number the request code from 1000 to avoid collision with Gallery.
     private static final int REQUEST_CROP = 1000;
@@ -281,6 +283,8 @@ public class PhotoModule
      * and restore it after HDR is off.
      */
     private String mFlashModeBeforeSceneMode;
+
+    private String mWhiteBalanceModeBeforeSceneMode;
 
     private void checkDisplayRotation() {
         // Need to just be a no-op for the quick resume-pause scenario.
@@ -650,6 +654,40 @@ public class PhotoModule
                 mCameraCapabilities.getExposureCompensationStep();
         }
 
+            String scenemode = mAppController.getSettingsManager()
+                    .getString(mAppController.getCameraScope(), Keys.KEY_SCENE_MODE);
+            bottomBarSpec.enableWhiteBalance = android.hardware.Camera.Parameters.SCENE_MODE_AUTO.equals(scenemode)
+                    || android.hardware.Camera.Parameters.SCENE_MODE_HDR.equals(scenemode);
+            bottomBarSpec.supportedWhiteBalances = mCameraCapabilities.getSupportedWhiteBalance();
+            bottomBarSpec.whiteBalanceSetCallback =
+                new CameraAppUI.BottomBarUISpec.WhiteBalanceSetCallback() {
+
+                @Override
+                public void setWhiteBalance(String value) {
+                    // TODO Auto-generated method stub
+                    if (mPaused || mCameraSettings == null
+                            || mCameraCapabilities == null) return;
+                    if (DEBUG) Log.i(TAG, "WhiteBalanceSetCallback");
+                    setWhiteBalanceInternal(value);
+                }
+            };
+            if (DEBUG) {
+                Log.i(TAG, "supportedWhiteBalances size = "
+                        + bottomBarSpec.supportedWhiteBalances.size());
+                for (CameraCapabilities.WhiteBalance wb : bottomBarSpec.supportedWhiteBalances) {
+                    Log.i(TAG, "supported wb = " + wb.name());
+                }
+            }
+
+//            if (bottomBarSpec.supportedWhiteBalances.size() != 5) {
+//                bottomBarSpec.supportedWhiteBalances.clear();
+//                bottomBarSpec.supportedWhiteBalances.add(CameraCapabilities.WhiteBalance.CLOUDY_DAYLIGHT);
+//                bottomBarSpec.supportedWhiteBalances.add(CameraCapabilities.WhiteBalance.INCANDESCENT);
+//                bottomBarSpec.supportedWhiteBalances.add(CameraCapabilities.WhiteBalance.FLUORESCENT);
+//                bottomBarSpec.supportedWhiteBalances.add(CameraCapabilities.WhiteBalance.DAYLIGHT);
+//                bottomBarSpec.supportedWhiteBalances.add(CameraCapabilities.WhiteBalance.AUTO);
+//            }
+
         bottomBarSpec.enableSelfTimer = true;
         bottomBarSpec.showSelfTimer = true;
 
@@ -690,6 +728,16 @@ public class PhotoModule
         }
         settingsManager.setToDefault(mAppController.getCameraScope(),
                                      Keys.KEY_EXPOSURE);
+    }
+
+    private void resetWhiteBalance() {
+        SettingsManager settingsManager = mActivity.getSettingsManager();
+        if (settingsManager == null) {
+            Log.e(TAG, "Settings manager is null!");
+            return;
+        }
+        settingsManager.setToDefault(mAppController.getCameraScope(),
+                                     Keys.KEY_WHITEBALANCE);
     }
 
     // Snapshots can only be taken after this is called. It should be called
@@ -1848,10 +1896,11 @@ public class PhotoModule
 
     @Override
     public void onSettingChanged(SettingsManager settingsManager, String key) {
+        Log.i(TAG, "onSettingChanged = " + key);
         if (key.equals(Keys.KEY_FLASH_MODE)) {
             updateParametersFlashMode();
         }
-        if (key.equals(Keys.KEY_CAMERA_HDR)) {
+        /*if (key.equals(Keys.KEY_CAMERA_HDR)) {
             if (settingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
                                            Keys.KEY_CAMERA_HDR)) {
                 // HDR is on.
@@ -1868,7 +1917,33 @@ public class PhotoModule
                 }
                 mAppController.getButtonManager().enableButton(ButtonManager.BUTTON_FLASH);
             }
-        }
+        }*/
+
+        if (key.equals(Keys.KEY_SCENE_MODE)) {
+            String curSceneMode = settingsManager.getString(mAppController.getCameraScope(), 
+                    Keys.KEY_SCENE_MODE);
+            if (mAppController.getButtonManager().isVisible(ButtonManager.BUTTON_WHITEBALANCE)) {
+                if (!android.hardware.Camera.Parameters.SCENE_MODE_AUTO.equals(curSceneMode)) {
+                    Log.i(TAG, "disable wb button");
+                    if (mAppController.getButtonManager().isVisible(ButtonManager.BUTTON_WHITEBALANCE))
+                        mAppController.getButtonManager().disableButton(ButtonManager.BUTTON_WHITEBALANCE);
+                    mWhiteBalanceModeBeforeSceneMode = settingsManager.getString(
+                            mAppController.getCameraScope(), Keys.KEY_WHITEBALANCE);
+                } else {
+                    Log.i(TAG, "enable wb button");
+                    if (mWhiteBalanceModeBeforeSceneMode != null) {
+                        settingsManager.set(mAppController.getCameraScope(),
+                                Keys.KEY_WHITEBALANCE,
+                                mWhiteBalanceModeBeforeSceneMode);
+                        updateParametersWhiteBalance();
+                        mWhiteBalanceModeBeforeSceneMode = null;
+                    }
+                    if (mAppController.getButtonManager().isVisible(ButtonManager.BUTTON_WHITEBALANCE))
+                        mAppController.getButtonManager().enableButton(ButtonManager.BUTTON_WHITEBALANCE);
+                }
+            }
+            setFocusParameters();
+         }
 
         if (mCameraDevice != null) {
             mCameraDevice.applySettings(mCameraSettings);
@@ -1952,6 +2027,8 @@ public class PhotoModule
 
         // Set exposure compensation
         updateParametersExposureCompensation();
+
+        updateParametersWhiteBalance();
 
         // Set the scene mode: also sets flash and white balance.
         updateParametersSceneMode();
@@ -2045,6 +2122,25 @@ public class PhotoModule
         }
     }
 
+    private void updateParametersWhiteBalance() {
+        SettingsManager settingsManager = mActivity.getSettingsManager();
+        CameraCapabilities.Stringifier stringifier = mCameraCapabilities.getStringifier();
+        if (settingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
+                                       Keys.KEY_WHITEBALANCE_ENABLED)) {
+            String value = settingsManager.getString(mAppController.getCameraScope(),
+                                                   Keys.KEY_WHITEBALANCE);
+            CameraCapabilities.WhiteBalance wb = stringifier.whiteBalanceFromString(value);
+            if (mCameraCapabilities.supports(wb)) {
+                mCameraSettings.setWhiteBalance(wb);
+            } else {
+                Log.w(TAG, "invalid whitebalance range: " + value);
+            }
+        } else {
+            if (DEBUG) Log.i(TAG, "default WhiteBalance");
+            setWhiteBalanceInternal(stringifier.stringify(CameraCapabilities.WhiteBalance.AUTO));
+        }
+    }
+
     private void updateParametersSceneMode() {
         CameraCapabilities.Stringifier stringifier = mCameraCapabilities.getStringifier();
         SettingsManager settingsManager = mActivity.getSettingsManager();
@@ -2079,6 +2175,8 @@ public class PhotoModule
                     mFocusManager.getFocusMode(mCameraSettings.getCurrentFocusMode()));
         } else {
             mFocusManager.overrideFocusMode(mCameraSettings.getCurrentFocusMode());
+            mWhiteBalanceModeBeforeSceneMode = settingsManager.getString(
+                    mAppController.getCameraScope(), Keys.KEY_WHITEBALANCE);
         }
     }
 
@@ -2122,6 +2220,20 @@ public class PhotoModule
                                 Keys.KEY_EXPOSURE, value);
         } else {
             Log.w(TAG, "invalid exposure range: " + value);
+        }
+    }
+
+    public void setWhiteBalanceInternal(String value)  {
+        if (DEBUG) Log.i(TAG,"setWhiteBalance = " + value);
+        CameraCapabilities.Stringifier stringifier = mCameraCapabilities.getStringifier();
+        CameraCapabilities.WhiteBalance wb = stringifier.whiteBalanceFromString(value);
+        if (mCameraCapabilities.supports(wb)) {
+            mCameraSettings.setWhiteBalance(wb);
+            SettingsManager settingsManager = mActivity.getSettingsManager();
+            settingsManager.set(mAppController.getCameraScope(),
+                    Keys.KEY_WHITEBALANCE, value);
+        } else {
+            Log.w(TAG, "invalid whitebalance: " + value);
         }
     }
 

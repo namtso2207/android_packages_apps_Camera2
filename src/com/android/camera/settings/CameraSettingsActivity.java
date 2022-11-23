@@ -72,6 +72,7 @@ public class CameraSettingsActivity extends FragmentActivity {
     public static final String PREF_SCREEN_EXTRA = "pref_screen_extra";
     public static final String HIDE_ADVANCED_SCREEN = "hide_advanced";
     private static final int PERMISSION_REQUEST_CODE = 1;
+    public static final String HIDE_WB_SCREEN = "hide_wb";
     private OneCameraManager mOneCameraManager;
 
     @Override
@@ -148,6 +149,7 @@ public class CameraSettingsActivity extends FragmentActivity {
         private CameraDeviceInfo mInfos;
         private String mPrefKey;
         private boolean mHideAdvancedScreen;
+        private boolean mHideWbScreen;
         private boolean mGetSubPrefAsRoot = true;
 
         // Selected resolutions for the different cameras and sizes.
@@ -163,6 +165,7 @@ public class CameraSettingsActivity extends FragmentActivity {
             if (arguments != null) {
                 mPrefKey = arguments.getString(PREF_SCREEN_EXTRA);
                 mHideAdvancedScreen = arguments.getBoolean(HIDE_ADVANCED_SCREEN);
+                mHideWbScreen = arguments.getBoolean(HIDE_WB_SCREEN);
             }
             Context context = this.getActivity().getApplicationContext();
             addPreferencesFromResource(R.xml.camera_preferences);
@@ -173,6 +176,9 @@ public class CameraSettingsActivity extends FragmentActivity {
             if (mHideAdvancedScreen) {
                 PreferenceScreen root = (PreferenceScreen) findPreference("prefscreen_top");
                 root.removePreference(advancedScreen);
+            } else {
+                if (mHideWbScreen)
+                    advancedScreen.removePreference(findPreference(Keys.KEY_WHITEBALANCE_ENABLED));
             }
 
             // Allow the Helper to edit the full preference hierarchy, not the

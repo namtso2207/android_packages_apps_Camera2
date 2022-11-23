@@ -35,12 +35,14 @@ import android.widget.ImageButton;
 import com.android.camera.MultiToggleImageButton;
 import com.android.camera.ui.RadioOptions;
 import com.android.camera.ui.TopRightWeightedLayout;
+import com.android.camera.util.CameraUtil;
 import com.android.camera.util.Gusterpolator;
 import com.android.camera2.R;
-
+import android.util.Log;
 import java.util.ArrayList;
 
 public class ModeOptions extends FrameLayout {
+    private static final String TAG = "ModeOptions";
     private int mBackgroundColor;
     private final Paint mPaint = new Paint();
     private boolean mIsHiddenOrHiding;
@@ -49,6 +51,7 @@ public class ModeOptions extends FrameLayout {
     private TopRightWeightedLayout mModeOptionsButtons;
     private RadioOptions mModeOptionsPano;
     private RadioOptions mModeOptionsExposure;
+    private RadioOptions mModeOptionsWhiteBalance;
 
     private AnimatorSet mVisibleAnimator;
     private AnimatorSet mHiddenAnimator;
@@ -124,7 +127,20 @@ public class ModeOptions extends FrameLayout {
         mModeOptionsButtons = (TopRightWeightedLayout) findViewById(R.id.mode_options_buttons);
         mModeOptionsPano = (RadioOptions) findViewById(R.id.mode_options_pano);
         mModeOptionsExposure = (RadioOptions) findViewById(R.id.mode_options_exposure);
+        mModeOptionsWhiteBalance = (RadioOptions) findViewById(R.id.mode_options_whitebalance);
         mMainBar = mActiveBar = mModeOptionsButtons;
+
+        ImageButton whiteBalanceButton = (ImageButton) findViewById(R.id.wb_button);
+        whiteBalanceButton.setClickable(true);
+        whiteBalanceButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new Exception("").printStackTrace();
+                mActiveBar = mModeOptionsWhiteBalance;
+                mMainBar.setVisibility(View.INVISIBLE);
+                mActiveBar.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     public void showExposureOptions() {

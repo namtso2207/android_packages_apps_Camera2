@@ -70,6 +70,8 @@ import com.android.camera.widget.IndicatorIconController;
 import com.android.camera.widget.ModeOptionsOverlay;
 import com.android.camera.widget.RoundedThumbnailView;
 import com.android.camera2.R;
+import com.android.ex.camera2.portability.CameraCapabilities;
+import java.util.Set;
 
 /**
  * CameraAppUI centralizes control of views shared across modules. Whereas module
@@ -476,6 +478,13 @@ public class CameraAppUI implements ModeListView.ModeSwitchListener,
          * disabled.
          */
         public boolean showSelfTimer = false;
+
+        public boolean enableWhiteBalance = false;
+        public Set<CameraCapabilities.WhiteBalance> supportedWhiteBalances;
+        public interface WhiteBalanceSetCallback {
+            public void setWhiteBalance(String value);
+        }
+        public WhiteBalanceSetCallback whiteBalanceSetCallback;
     }
 
 
@@ -2211,6 +2220,35 @@ public class CameraAppUI implements ModeListView.ModeSwitchListener,
         } else {
             buttonManager.hideButton(ButtonManager.BUTTON_EXPOSURE_COMPENSATION);
             buttonManager.setExposureCompensationCallback(null);
+        }
+
+        boolean enableWhiteBalance = bottomBarSpec.enableWhiteBalance &&
+                bottomBarSpec.supportedWhiteBalances.size() > 1 &&
+                mController.getSettingsManager().getBoolean(SettingsManager.SCOPE_GLOBAL,
+                            Keys.KEY_WHITEBALANCE_ENABLED);
+        Log.v(TAG, "---zc enableWhiteBalance:" + enableWhiteBalance);
+        if (enableWhiteBalance) {
+            buttonManager.initializePushButton(ButtonManager.BUTTON_WHITEBALANCE, null);
+            buttonManager.setWhiteBalanceParameters(bottomBarSpec.supportedWhiteBalances);
+
+            buttonManager.setWhiteBalanceCallback(
+                    bottomBarSpec.whiteBalanceSetCallback);
+            buttonManager.updateWhiteBalanceButtons();
+         } else {
+            if (!bottomBarSpec.enableWhiteBalance
+                    && mController.getSettingsManager().getBoolean(SettingsManager.SCOPE_GLOBAL,
+                            Keys.KEY_WHITEBALANCE_ENABLED)) {
+                buttonManager.initializePushButton(ButtonManager.BUTTON_WHITEBALANCE, null);
+                buttonManager.setWhiteBalanceParameters(bottomBarSpec.supportedWhiteBalances);
+
+                buttonManager.setWhiteBalanceCallback(
+                        bottomBarSpec.whiteBalanceSetCallback);
+                buttonManager.updateWhiteBalanceButtons();
+                buttonManager.disableButton(ButtonManager.BUTTON_WHITEBALANCE);
+            } else {
+                buttonManager.hideButton(ButtonManager.BUTTON_WHITEBALANCE);
+                buttonManager.setWhiteBalanceCallback(null);
+            }
         }
 
         /** Intent UI */

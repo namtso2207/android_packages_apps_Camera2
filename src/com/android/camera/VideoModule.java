@@ -16,6 +16,7 @@
 
 package com.android.camera;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -55,6 +56,7 @@ import com.android.camera.app.MediaSaver;
 import com.android.camera.app.MemoryManager;
 import com.android.camera.app.MemoryManager.MemoryListener;
 import com.android.camera.app.OrientationManager;
+import com.android.camera.debug.DebugPropertyHelper;
 import com.android.camera.debug.Log;
 import com.android.camera.exif.ExifInterface;
 import com.android.camera.hardware.HardwareSpec;
@@ -90,9 +92,11 @@ import java.util.Set;
 public class VideoModule extends CameraModule
         implements FocusOverlayManager.Listener, MediaRecorder.OnErrorListener,
         MediaRecorder.OnInfoListener, MemoryListener,
-        OrientationManager.OnOrientationChangeListener, VideoController {
+        OrientationManager.OnOrientationChangeListener, VideoController,
+        SettingsManager.OnSettingChangedListener {
 
     private static final Log.Tag TAG = new Log.Tag("VideoModule");
+    private final boolean DEBUG = true;
 
     // Messages defined for the UI thread handler.
     private static final int MSG_CHECK_DISPLAY_ROTATION = 4;
@@ -208,6 +212,7 @@ public class VideoModule extends CameraModule
     private boolean mMirror;
     private boolean mFocusAreaSupported;
     private boolean mMeteringAreaSupported;
+    private boolean mAwbLockSupported;
 
     private final CameraAgent.CameraAFCallback mAutoFocusCallback =
             new CameraAgent.CameraAFCallback() {
@@ -573,6 +578,33 @@ public class VideoModule extends CameraModule
             bottomBarSpec.reviewCallback = mReviewCallback;
         }
 
+        if (mCameraCapabilities != null) {
+            bottomBarSpec.enableWhiteBalance = true;
+            bottomBarSpec.supportedWhiteBalances = mCameraCapabilities.getSupportedWhiteBalance();
+            bottomBarSpec.whiteBalanceSetCallback =
+                    new CameraAppUI.BottomBarUISpec.WhiteBalanceSetCallback() {
+
+                @Override
+                public void setWhiteBalance(String value) {
+                    // TODO Auto-generated method stub
+                    if (mPaused || mCameraSettings == null
+                            || mCameraCapabilities == null) return;
+                    if (DEBUG) Log.i(TAG, "WhiteBalanceSetCallback");
+                    setWhiteBalanceInternal(value);
+                }
+            };
+            if (DEBUG) {
+                Log.i(TAG, "supportedWhiteBalances size = "
+                        + bottomBarSpec.supportedWhiteBalances.size());
+                for (CameraCapabilities.WhiteBalance wb : bottomBarSpec.supportedWhiteBalances) {
+                    Log.i(TAG, "supported wb = " + wb.name());
+                }
+            }
+        }
+
+        bottomBarSpec.enableSelfTimer = true;
+        bottomBarSpec.showSelfTimer = true;
+
         return bottomBarSpec;
     }
 
@@ -590,6 +622,7 @@ public class VideoModule extends CameraModule
         mFocusAreaSupported = mCameraCapabilities.supports(CameraCapabilities.Feature.FOCUS_AREA);
         mMeteringAreaSupported =
                 mCameraCapabilities.supports(CameraCapabilities.Feature.METERING_AREA);
+        mAwbLockSupported = mCameraCapabilities.supports(CameraCapabilities.Feature.AUTO_WHITE_BALANCE_LOCK);
         readVideoPreferences();
         updateDesiredPreviewSize();
         resizeForPreviewAspectRatio();
@@ -598,6 +631,11 @@ public class VideoModule extends CameraModule
         // we should consider passing the parameters to focus overlay to ensure the
         // parameters are up to date.
         mFocusManager.updateCapabilities(mCameraCapabilities);
+
+        // Set a listener which updates camera parameters based
+        // on changed settings.
+        SettingsManager settingsManager = mActivity.getSettingsManager();
+        settingsManager.addListener(this);
 
         startPreview();
         initializeVideoSnapshot();
@@ -1422,6 +1460,15 @@ public class VideoModule extends CameraModule
         });
     }
 
+    @Override
+    public void onSettingChanged(SettingsManager settingsManager, String key) {
+        // TODO Auto-generated method stub
+        if (mPaused) return;
+        Log.i(TAG, "onSettingChanged = " + key);
+        if (mCameraDevice != null)
+            mCameraDevice.applySettings(mCameraSettings);
+    }
+
     private Bitmap getVideoThumbnail() {
         Bitmap bitmap = null;
         if (mVideoFileDescriptor != null) {
@@ -1659,6 +1706,8 @@ public class VideoModule extends CameraModule
         }
         updateFocusParameters();
 
+        updateCameraParametersPreference();
+
         mCameraSettings.setRecordingHintEnabled(true);
 
         if (mCameraCapabilities.supports(CameraCapabilities.Feature.VIDEO_STABILIZATION)) {
@@ -1721,6 +1770,57 @@ public class VideoModule extends CameraModule
             }
         }
         updateAutoFocusMoveCallback();
+    }
+
+    private void updateCameraParametersPreference() {
+        // some monkey tests can get here when shutting the app down
+        // make sure mCameraDevice is still valid, b/17580046
+        if (mCameraDevice == null) {
+            return;
+        }
+        //setAutoWhiteBalanceLockIfSupported();
+        updateParametersWhiteBalance();
+    }
+
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    private void setAutoWhiteBalanceLockIfSupported() {
+        if (mAwbLockSupported) {
+            mCameraSettings.setAutoWhiteBalanceLock(mFocusManager.getAeAwbLock());
+        }
+    }
+
+    private void updateParametersWhiteBalance() {
+        SettingsManager settingsManager = mActivity.getSettingsManager();
+        CameraCapabilities.Stringifier stringifier = mCameraCapabilities.getStringifier();
+        if (settingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
+                                       Keys.KEY_WHITEBALANCE_ENABLED)) {
+            String value = settingsManager.getString(mAppController.getCameraScope(),
+                                                   Keys.KEY_WHITEBALANCE);
+            CameraCapabilities.WhiteBalance wb = stringifier.whiteBalanceFromString(value);
+            if (mCameraCapabilities.supports(wb)) {
+                mCameraSettings.setWhiteBalance(wb);
+            } else {
+                Log.w(TAG, "invalid whitebalance range: " + value);
+            }
+        } else {
+            if (DEBUG) Log.i(TAG, "default WhiteBalance");
+            setWhiteBalanceInternal(stringifier.stringify(CameraCapabilities.WhiteBalance.AUTO));
+        }
+    }
+
+    public void setWhiteBalanceInternal(String value)  {
+        if (DEBUG) Log.i(TAG,"setWhiteBalance = " + value);
+        CameraCapabilities.Stringifier stringifier = mCameraCapabilities.getStringifier();
+        CameraCapabilities.WhiteBalance wb = stringifier.whiteBalanceFromString(value);
+        if (mCameraCapabilities.supports(wb)) {
+            if (DEBUG) Log.i(TAG,"supports wb");
+            mCameraSettings.setWhiteBalance(wb);
+            SettingsManager settingsManager = mActivity.getSettingsManager();
+            settingsManager.set(mAppController.getCameraScope(),
+                    Keys.KEY_WHITEBALANCE, value);
+        } else {
+            Log.w(TAG, "invalid whitebalance: " + value);
+        }
     }
 
     @Override
