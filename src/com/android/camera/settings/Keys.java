@@ -219,6 +219,9 @@ public class Keys {
             settingsManager.setToDefault(SettingsManager.SCOPE_GLOBAL,
                 KEY_CAMERA_SOUND);
 
+        if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_RECORD_LOCATION))
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL, KEY_RECORD_LOCATION, false);
+
         if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_WHITEBALANCE_ENABLED))
             settingsManager.set(SettingsManager.SCOPE_GLOBAL, KEY_WHITEBALANCE_ENABLED, false);
     }
