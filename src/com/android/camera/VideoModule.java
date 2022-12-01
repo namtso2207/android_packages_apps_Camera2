@@ -1505,7 +1505,7 @@ public class VideoModule extends CameraModule
             mUI.setOrientationIndicator(0, true);
             mActivity.enableKeepScreenOn(false);
             if (shouldAddToMediaStoreNow && !fail) {
-                if (mIsVideoCaptureIntent) {
+                if (mIsVideoCaptureIntent && mActivity.getIntent().getExtras() != null) {
                     // if no file save is needed, we can show the post capture UI now
                     showCaptureResult();
                 }

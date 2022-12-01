@@ -17,6 +17,7 @@
 package com.android.camera;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.RectF;
@@ -90,6 +91,7 @@ import com.android.camera.util.Size;
 import com.android.camera2.R;
 import com.android.ex.camera2.portability.CameraAgent.CameraProxy;
 import com.google.common.logging.eventprotos;
+import android.provider.MediaStore;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -167,6 +169,7 @@ public class CaptureModule extends CameraModule implements
     private FocusController mFocusController;
     private OneCameraCharacteristics mCameraCharacteristics;
     final private PreviewTransformCalculator mPreviewTransformCalculator;
+    private CameraActivity mCameraActivity;
 
     /** The listener to listen events from the CaptureModuleUI. */
     private final CaptureModuleUI.CaptureModuleUIListener mUIListener =
@@ -399,6 +402,7 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void init(CameraActivity activity, boolean isSecureCamera, boolean isCaptureIntent) {
+        mCameraActivity = activity;
         Profile guard = mProfiler.create("CaptureModule.init").start();
         Log.d(TAG, "init UseAutotransformUiLayout = " + USE_AUTOTRANSFORM_UI_LAYOUT);
         HandlerThread thread = new HandlerThread("CaptureModule.mCameraHandler");
@@ -676,6 +680,18 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void resume() {
+        Log.d(TAG, "resume");
+        Intent intent = mCameraActivity.getIntent();
+        String action = intent.getAction();
+        if (MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA.equals(action)
+                || MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE.equals(action)) {
+            if (intent.getBooleanExtra("android.intent.extra.USE_FRONT_CAMERA", false) ||
+                    intent.getBooleanExtra("com.google.assistant.extra.USE_FRONT_CAMERA", false))
+                mCameraFacing = Facing.FRONT;
+            else
+                mCameraFacing = Facing.BACK;
+        }
+
         if (mShowErrorAndFinish) {
             return;
         }
