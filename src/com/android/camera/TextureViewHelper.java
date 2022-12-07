@@ -229,7 +229,7 @@ public class TextureViewHelper implements TextureView.SurfaceTextureListener,
      */
     private void updatePreviewArea(Matrix matrix) {
         mPreviewArea.set(0, 0, mWidth, mHeight);
-        matrix.mapRect(mPreviewArea);
+//        matrix.mapRect(mPreviewArea);
         onPreviewAreaChanged(mPreviewArea);
     }
 
