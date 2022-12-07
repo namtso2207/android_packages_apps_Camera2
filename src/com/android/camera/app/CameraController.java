@@ -109,6 +109,17 @@ public class CameraController implements CameraAgent.CameraOpenCallback, CameraP
         if (mInfo == null) {
             return null;
         }
+        try {
+            return mInfo.getCharacteristics(cameraId);
+        }catch (Exception e){
+            if(getFirstBackCameraId() != -1){
+                cameraId = getFirstBackCameraId();
+            }else if(getFirstFrontCameraId() != -1){
+                cameraId = getFirstFrontCameraId();
+            }else {
+                Log.e(TAG, "cameraId not available:" + cameraId);
+            }
+        }
         return mInfo.getCharacteristics(cameraId);
     }
 
