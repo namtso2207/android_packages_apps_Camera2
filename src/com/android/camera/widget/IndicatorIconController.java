@@ -21,6 +21,7 @@ import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 
 import com.android.camera.ButtonManager;
 import com.android.camera.app.AppController;
@@ -28,6 +29,7 @@ import com.android.camera.debug.Log;
 import com.android.camera.settings.Keys;
 import com.android.camera.settings.SettingsManager;
 import com.android.camera.util.PhotoSphereHelper;
+import com.android.ex.camera2.portability.CameraCapabilities;
 import com.android.camera2.R;
 
 /**
@@ -53,6 +55,13 @@ public class IndicatorIconController
     private ImageView mExposureIndicatorP1;
     private ImageView mExposureIndicatorP2;
 
+    private ImageView mWbIndicatorCloudy;
+    private ImageView mWbIndicatorFluorescent;
+    private ImageView mWbIndicatorTungsten;
+    private ImageView mWbIndicatorDaylight;
+
+    private LinearLayout mModeOptionsToggle;
+
     private TypedArray mFlashIndicatorPhotoIcons;
     private TypedArray mFlashIndicatorVideoIcons;
     private TypedArray mHdrPlusIndicatorIcons;
@@ -65,6 +74,8 @@ public class IndicatorIconController
     public IndicatorIconController(AppController controller, View root) {
         mController = controller;
         Context context = controller.getAndroidContext();
+
+        mModeOptionsToggle = (LinearLayout) root.findViewById(R.id.mode_options_toggle);
 
         mFlashIndicator = (ImageView) root.findViewById(R.id.flash_indicator);
         mFlashIndicatorPhotoIcons = context.getResources().obtainTypedArray(
@@ -93,6 +104,11 @@ public class IndicatorIconController
         mExposureIndicatorN1 = (ImageView) root.findViewById(R.id.exposure_n1_indicator);
         mExposureIndicatorP1 = (ImageView) root.findViewById(R.id.exposure_p1_indicator);
         mExposureIndicatorP2 = (ImageView) root.findViewById(R.id.exposure_p2_indicator);
+
+        mWbIndicatorCloudy = (ImageView) root.findViewById(R.id.wb_cloudy_indicator);
+        mWbIndicatorFluorescent = (ImageView) root.findViewById(R.id.wb_fluorescent_indicator);
+        mWbIndicatorTungsten = (ImageView) root.findViewById(R.id.wb_tungsten_indicator);
+        mWbIndicatorDaylight = (ImageView) root.findViewById(R.id.wb_daylight_indicator);
     }
 
     @Override
@@ -131,6 +147,10 @@ public class IndicatorIconController
                 syncExposureIndicator();
                 break;
             }
+            case ButtonManager.BUTTON_WHITEBALANCE: {
+                syncWhiteBalanceIndicator();
+                break;
+            }
             default:
                 // Do nothing.  The indicator doesn't care
                 // about button that don't correspond to indicators.
@@ -147,6 +167,7 @@ public class IndicatorIconController
         syncPanoIndicator();
         syncExposureIndicator();
         syncCountdownTimerIndicator();
+        syncWhiteBalanceIndicator();
     }
 
     /**
@@ -278,6 +299,41 @@ public class IndicatorIconController
         }
     }
 
+    private void syncWhiteBalanceIndicator() {
+        if (mWbIndicatorCloudy == null
+            || mWbIndicatorFluorescent == null
+            || mWbIndicatorTungsten == null
+            || mWbIndicatorDaylight == null) {
+            Log.w(TAG, "Trying to sync whitebalance indicators that are not initialized.");
+            return;
+        }
+
+        changeVisibility(mWbIndicatorCloudy, View.GONE);
+        changeVisibility(mWbIndicatorFluorescent, View.GONE);
+        changeVisibility(mWbIndicatorTungsten, View.GONE);
+        changeVisibility(mWbIndicatorDaylight, View.GONE);
+
+        ButtonManager buttonManager = mController.getButtonManager();
+        if (buttonManager.isEnabled(ButtonManager.BUTTON_WHITEBALANCE)
+                && buttonManager.isVisible(ButtonManager.BUTTON_WHITEBALANCE)) {
+            String value = mController.getSettingsManager().getString(
+                    mController.getCameraScope(), Keys.KEY_WHITEBALANCE);
+            if (ButtonManager.toApiCase(CameraCapabilities.WhiteBalance.CLOUDY_DAYLIGHT.name())
+                    .equals(value)) {
+                changeVisibility(mWbIndicatorCloudy, View.VISIBLE);
+            } else if (ButtonManager.toApiCase(CameraCapabilities.WhiteBalance.FLUORESCENT.name())
+                        .equals(value)) {
+                changeVisibility(mWbIndicatorFluorescent, View.VISIBLE);
+            } else if (ButtonManager.toApiCase(CameraCapabilities.WhiteBalance.INCANDESCENT.name())
+                        .equals(value)) {
+                changeVisibility(mWbIndicatorTungsten, View.VISIBLE);
+            } else if (ButtonManager.toApiCase(CameraCapabilities.WhiteBalance.DAYLIGHT.name())
+                        .equals(value)) {
+                changeVisibility(mWbIndicatorDaylight, View.VISIBLE);
+            }
+        }
+    }
+
     private void syncCountdownTimerIndicator() {
         ButtonManager buttonManager = mController.getButtonManager();
 
@@ -353,6 +409,9 @@ public class IndicatorIconController
             syncCountdownTimerIndicator();
             return;
         }
+        if (key.equals(Keys.KEY_WHITEBALANCE)) {
+            syncWhiteBalanceIndicator();
+            return;
+        }
     }
-
 }

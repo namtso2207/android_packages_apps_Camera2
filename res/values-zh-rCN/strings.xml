@@ -380,4 +380,6 @@
     <string name="pref_boolean_true" msgid="4131945223998878009">"1"</string>
     <string name="session_saving_image" msgid="8932315404486416826">"正在保存…"</string>
     <string name="pref_camera_sound_title">拍照声音</string>
+    <string name="pref_restore_default_settings_title">还原默认设置</string>
+    <string name="pref_restore_default_settings_msg">还原相机默认设置?</string>
 </resources>

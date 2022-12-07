@@ -16,6 +16,8 @@
 
 package com.android.camera;
 
+import java.util.Set;
+import java.util.Locale;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.view.LayoutInflater;
@@ -30,13 +32,16 @@ import com.android.camera.settings.SettingsManager;
 import com.android.camera.ui.RadioOptions;
 import com.android.camera.util.PhotoSphereHelper;
 import com.android.camera.widget.ModeOptions;
+import com.android.ex.camera2.portability.CameraCapabilities;
 import com.android.camera2.R;
+import android.util.Log;
 
 /**
  * A  class for generating pre-initialized
  * {@link #android.widget.ImageButton}s.
  */
 public class ButtonManager implements SettingsManager.OnSettingChangedListener {
+    private static final String TAG = "ButtonManager";
     public static final int BUTTON_FLASH = 0;
     public static final int BUTTON_TORCH = 1;
     public static final int BUTTON_HDR_PLUS_FLASH = 2;
@@ -50,6 +55,7 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
     public static final int BUTTON_GRID_LINES = 10;
     public static final int BUTTON_EXPOSURE_COMPENSATION = 11;
     public static final int BUTTON_COUNTDOWN = 12;
+    public static final int BUTTON_WHITEBALANCE = 13;
 
     /** For two state MultiToggleImageButtons, the off index. */
     public static final int OFF = 0;
@@ -84,6 +90,14 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
     private View mModeOptionsButtons;
     private ModeOptions mModeOptions;
 
+    private ImageButton mButtonWhiteBalance;
+    private ImageButton mWbCloudy;
+    private ImageButton mWbFluorescent;
+    private ImageButton mWbAuto;
+    private ImageButton mWbIncandescent;
+    private ImageButton mWbSunlight;
+    private RadioOptions mModeOptionsWhiteBalance;
+
     private int mMinExposureCompensation;
     private int mMaxExposureCompensation;
     private float mExposureCompensationStep;
@@ -99,6 +113,8 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
     private boolean mIsCameraButtonBlocked;
 
     private final AppController mAppController;
+
+    private CameraCapabilities mCameraCapabilities;
 
     /**
      * Get a new global ButtonManager.
@@ -122,6 +138,10 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
         getButtonsReferences(root);
     }
 
+    public static String toApiCase(String enumCase) {
+        return enumCase.toLowerCase(Locale.US).replaceAll("_", "-");
+    }
+
     /**
      * ButtonStatusListener provides callbacks for when button's
      * visibility changes and enabled status changes.
@@ -143,6 +163,14 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
      */
     public void setListener(ButtonStatusListener listener) {
         mListener = listener;
+    }
+
+    public void setCameraCapabilities(CameraCapabilities cameraCapabilities) {
+        mCameraCapabilities = cameraCapabilities;
+    }
+
+    public CameraCapabilities getCameraCapabilities() {
+        return mCameraCapabilities;
     }
 
     /**
@@ -177,6 +205,14 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
         mModeOptions = (ModeOptions) root.findViewById(R.id.mode_options);
 
         mButtonCountdown = (MultiToggleImageButton) root.findViewById(R.id.countdown_toggle_button);
+
+        mButtonWhiteBalance = (ImageButton) root.findViewById(R.id.wb_button);
+        mWbCloudy = (ImageButton) root.findViewById(R.id.wb_cloudy);
+        mWbFluorescent = (ImageButton) root.findViewById(R.id.wb_fluorescent);
+        mWbAuto = (ImageButton) root.findViewById(R.id.wb_auto);
+        mWbIncandescent = (ImageButton) root.findViewById(R.id.wb_incandescent);
+        mWbSunlight = (ImageButton) root.findViewById(R.id.wb_sunlight);
+        mModeOptionsWhiteBalance = (RadioOptions) root.findViewById(R.id.mode_options_whitebalance);
     }
 
     @Override
@@ -220,7 +256,9 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
             index = mSettingsManager.getIndexOfCurrentValue(SettingsManager.SCOPE_GLOBAL,
                                                             Keys.KEY_COUNTDOWN_DURATION);
             button = getButtonOrError(BUTTON_COUNTDOWN);
-        }
+        } else if (key.equals(Keys.KEY_WHITEBALANCE)) {
+            updateWhiteBalanceButtons();
+        }        
 
         if (button != null && button.getState() != index) {
             button.setState(Math.max(index, 0), false);
@@ -321,6 +359,11 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
                     throw new IllegalStateException("Exposure Compensation button could not be found.");
                 }
                 return mButtonExposureCompensation;
+            case BUTTON_WHITEBALANCE:
+                if (mButtonWhiteBalance == null) {
+                    throw new IllegalStateException("WhiteBalance button could not be found.");
+                }
+                return mButtonWhiteBalance;
             default:
                 throw new IllegalArgumentException("button not known by id=" + buttonId);
         }
@@ -388,7 +431,8 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
     public void initializePushButton(int buttonId, View.OnClickListener cb,
             int imageId, int contentDescriptionId) {
         ImageButton button = getImageButtonOrError(buttonId);
-        button.setOnClickListener(cb);
+        if (cb != null)
+            button.setOnClickListener(cb);
         if (imageId != NO_RESOURCE) {
             button.setImageResource(imageId);
         }
@@ -410,6 +454,14 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
             if (mListener != null) {
                 mListener.onButtonVisibilityChanged(this, buttonId);
             }
+        }
+
+        switch (buttonId) {
+            case BUTTON_WHITEBALANCE:
+                initializeWhiteBalanceButton(button);
+                break;
+            default:
+                break;
         }
     }
 
@@ -591,6 +643,38 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
         }
     }
 
+    public void setWhiteBalanceCallback(final CameraAppUI.BottomBarUISpec
+            .WhiteBalanceSetCallback cb) {
+        if (cb == null) {
+            mModeOptionsWhiteBalance.setOnOptionClickListener(null);
+        } else {
+            mModeOptionsWhiteBalance
+            .setOnOptionClickListener(new RadioOptions.OnOptionClickListener() {
+                @Override
+                public void onOptionClicked(View v) {
+                    String value = (String) v.getTag();
+                    cb.setWhiteBalance(value);
+                    if (toApiCase(CameraCapabilities.WhiteBalance.CLOUDY_DAYLIGHT.name())
+                            .equals(value)) {
+                        mButtonWhiteBalance.setImageResource(R.drawable.ic_whitebalance_cloudy);
+                    } else if (toApiCase(CameraCapabilities.WhiteBalance.INCANDESCENT.name())
+                            .equals(value)) {
+                        mButtonWhiteBalance.setImageResource(R.drawable.ic_whitebalance_incandescent);
+                    } else if (toApiCase(CameraCapabilities.WhiteBalance.FLUORESCENT.name())
+                            .equals(value)) {
+                        mButtonWhiteBalance.setImageResource(R.drawable.ic_whitebalance_fluorescent);
+                    } else if (toApiCase(CameraCapabilities.WhiteBalance.DAYLIGHT.name())
+                            .equals(value)) {
+                        mButtonWhiteBalance.setImageResource(R.drawable.ic_whitebalance_daylight);
+                    } else if (toApiCase(CameraCapabilities.WhiteBalance.AUTO.name())
+                            .equals(value)) {
+                        mButtonWhiteBalance.setImageResource(R.drawable.ic_whitebalance_auto);
+                    }
+                }
+            });
+        }
+    }
+
     /**
      * Set the exposure compensation parameters supported by the current camera mode.
      * @param min Minimum exposure compensation value.
@@ -609,6 +693,16 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
         setVisible(mExposureP2, (Math.round(max * step) >= 2));
 
         updateExposureButtons();
+    }
+
+    public void setWhiteBalanceParameters(Set<CameraCapabilities.WhiteBalance> sets) {
+        setVisible(mWbCloudy, sets.contains(CameraCapabilities.WhiteBalance.CLOUDY_DAYLIGHT));
+        setVisible(mWbSunlight, sets.contains(CameraCapabilities.WhiteBalance.DAYLIGHT));
+        setVisible(mWbAuto, sets.contains(CameraCapabilities.WhiteBalance.AUTO));
+        setVisible(mWbFluorescent, sets.contains(CameraCapabilities.WhiteBalance.FLUORESCENT));
+        setVisible(mWbIncandescent, sets.contains(CameraCapabilities.WhiteBalance.INCANDESCENT));
+
+        updateWhiteBalanceButtons();
     }
 
     private static void setVisible(View v, boolean visible) {
@@ -874,6 +968,27 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
         });
     }
 
+    private void initializeWhiteBalanceButton(ImageButton button) {
+        String value = mSettingsManager.getString(
+                mAppController.getCameraScope(), Keys.KEY_WHITEBALANCE);
+        if (toApiCase(CameraCapabilities.WhiteBalance.CLOUDY_DAYLIGHT.name())
+                .equals(value)) {
+            button.setImageResource(R.drawable.ic_whitebalance_cloudy);
+        } else if (toApiCase(CameraCapabilities.WhiteBalance.INCANDESCENT.name())
+                .equals(value)) {
+            button.setImageResource(R.drawable.ic_whitebalance_incandescent);
+        } else if (toApiCase(CameraCapabilities.WhiteBalance.FLUORESCENT.name())
+                .equals(value)) {
+            button.setImageResource(R.drawable.ic_whitebalance_fluorescent);
+        } else if (toApiCase(CameraCapabilities.WhiteBalance.DAYLIGHT.name())
+                .equals(value)) {
+            button.setImageResource(R.drawable.ic_whitebalance_daylight);
+        } else if (toApiCase(CameraCapabilities.WhiteBalance.AUTO.name())
+                .equals(value)) {
+            button.setImageResource(R.drawable.ic_whitebalance_auto);
+        }
+    }
+
     /**
      * Update the visual state of the manual exposure buttons
      */
@@ -884,6 +999,12 @@ public class ButtonManager implements SettingsManager.OnSettingChangedListener {
             int comp = Math.round(compValue * mExposureCompensationStep);
             mModeOptionsExposure.setSelectedOptionByTag(String.valueOf(comp));
         }
+    }
+
+    public void updateWhiteBalanceButtons() {
+        String value = mSettingsManager.getString(mAppController.getCameraScope(),
+                Keys.KEY_WHITEBALANCE);
+        mModeOptionsWhiteBalance.setSelectedOptionByTag(value);
     }
 
     /**

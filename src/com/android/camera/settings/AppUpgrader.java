@@ -198,6 +198,13 @@ public class AppUpgrader extends SettingsUpgrader {
                     Keys.KEY_EXPOSURE_COMPENSATION_ENABLED, manualExposureCompensationEnabled);
         }
 
+        if (defaultPreferences.contains(Keys.KEY_WHITEBALANCE_ENABLED)) {
+            boolean manualWhiteBalanceEnabled = removeBoolean(defaultPreferences,
+                    Keys.KEY_WHITEBALANCE_ENABLED);
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL,
+                    Keys.KEY_WHITEBALANCE_ENABLED, manualWhiteBalanceEnabled);
+        }
+
         if (defaultPreferences.contains(Keys.KEY_CAMERA_SOUND)) {
             boolean cameraSoundEnabled = removeBoolean(defaultPreferences,
                     Keys.KEY_CAMERA_SOUND);

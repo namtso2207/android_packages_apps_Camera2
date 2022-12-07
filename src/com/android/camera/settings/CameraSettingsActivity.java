@@ -20,10 +20,12 @@ import android.Manifest;
 import android.app.ActionBar;
 import android.app.Activity;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
+import android.graphics.ImageFormat;
 import android.os.Bundle;
 import android.preference.ListPreference;
 import android.preference.Preference;
@@ -36,9 +38,12 @@ import android.view.MenuItem;
 
 import com.android.camera.FatalErrorHandler;
 import com.android.camera.FatalErrorHandlerImpl;
+import com.android.camera.app.CameraServicesImpl;
 import com.android.camera.debug.Log;
 import com.android.camera.device.CameraId;
+import com.android.camera.exif.Rational;
 import com.android.camera.one.OneCamera.Facing;
+import com.android.camera.one.OneCamera;
 import com.android.camera.one.OneCameraAccessException;
 import com.android.camera.one.OneCameraCharacteristics;
 import com.android.camera.one.OneCameraException;
@@ -72,6 +77,7 @@ public class CameraSettingsActivity extends FragmentActivity {
     public static final String PREF_SCREEN_EXTRA = "pref_screen_extra";
     public static final String HIDE_ADVANCED_SCREEN = "hide_advanced";
     private static final int PERMISSION_REQUEST_CODE = 1;
+    public static final String HIDE_WB_SCREEN = "hide_wb";
     private OneCameraManager mOneCameraManager;
 
     @Override
@@ -142,12 +148,14 @@ public class CameraSettingsActivity extends FragmentActivity {
 
         public static final String PREF_CATEGORY_RESOLUTION = "pref_category_resolution";
         public static final String PREF_CATEGORY_ADVANCED = "pref_category_advanced";
+        public static final String PREF_RESTORE_SETTINGS = "pref_restore_settings";
         private static final Log.Tag TAG = new Log.Tag("SettingsFragment");
         private static DecimalFormat sMegaPixelFormat = new DecimalFormat("##0.0");
         private String[] mCamcorderProfileNames;
         private CameraDeviceInfo mInfos;
         private String mPrefKey;
         private boolean mHideAdvancedScreen;
+        private boolean mHideWbScreen;
         private boolean mGetSubPrefAsRoot = true;
 
         // Selected resolutions for the different cameras and sizes.
@@ -155,6 +163,9 @@ public class CameraSettingsActivity extends FragmentActivity {
 
         private SettingsManager mSettingsManager;
         private ManagedSwitchPreference mCameraSound;
+        private ManagedSwitchPreference mLocation;
+
+        private OneCameraManager mOneCameraManager;
 
         @Override
         public void onCreate(Bundle savedInstanceState) {
@@ -163,9 +174,13 @@ public class CameraSettingsActivity extends FragmentActivity {
             if (arguments != null) {
                 mPrefKey = arguments.getString(PREF_SCREEN_EXTRA);
                 mHideAdvancedScreen = arguments.getBoolean(HIDE_ADVANCED_SCREEN);
+                mHideWbScreen = arguments.getBoolean(HIDE_WB_SCREEN);
             }
             Context context = this.getActivity().getApplicationContext();
             addPreferencesFromResource(R.xml.camera_preferences);
+            // Put in the summaries for the currently set values.
+            final PreferenceScreen resolutionScreen =
+                    (PreferenceScreen) findPreference(PREF_CATEGORY_RESOLUTION);
             PreferenceScreen advancedScreen =
                     (PreferenceScreen) findPreference(PREF_CATEGORY_ADVANCED);
 
@@ -173,7 +188,20 @@ public class CameraSettingsActivity extends FragmentActivity {
             if (mHideAdvancedScreen) {
                 PreferenceScreen root = (PreferenceScreen) findPreference("prefscreen_top");
                 root.removePreference(advancedScreen);
+            } else {
+                if (mHideWbScreen)
+                    advancedScreen.removePreference(findPreference(Keys.KEY_WHITEBALANCE_ENABLED));
             }
+
+            FatalErrorHandler fatalErrorHandler = new FatalErrorHandlerImpl(this.getActivity());
+            try {
+                mOneCameraManager = OneCameraModule.provideOneCameraManager();
+            } catch (OneCameraException e) {
+                // Log error and continue. Modules requiring OneCamera should check
+                // and handle if null by showing error dialog or other treatment.
+                fatalErrorHandler.onGenericCameraAccessFailure();
+            }
+            mSettingsManager = CameraServicesImpl.instance().getSettingsManager();
 
             // Allow the Helper to edit the full preference hierarchy, not the
             // sub tree we may show as root. See {@link #getPreferenceScreen()}.
@@ -209,7 +237,20 @@ public class CameraSettingsActivity extends FragmentActivity {
             // device.
             setVisibilities();
 
+            final MyDialogPreference restoreSettings =
+                    (MyDialogPreference) findPreference(PREF_RESTORE_SETTINGS);
+            restoreSettings.setPositiveButtonListener(new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    // TODO Auto-generated method stub
+                    Keys.setToDefaults(mSettingsManager, getActivity().getApplicationContext());
+                    setDefaultPicturesize(mOneCameraManager.findFirstCameraFacing(Facing.BACK), OneCamera.Facing.BACK);
+                    setDefaultPicturesize(mOneCameraManager.findFirstCameraFacing(Facing.FRONT), OneCamera.Facing.FRONT);
+                    restoreUI();
+                }
+            });
             mCameraSound = (ManagedSwitchPreference) findPreference(Keys.KEY_CAMERA_SOUND);
+            mLocation = (ManagedSwitchPreference) findPreference(Keys.KEY_RECORD_LOCATION);
 
             // Put in the summaries for the currently set values.
             final PreferenceScreen resolutionScreen =
@@ -226,6 +267,38 @@ public class CameraSettingsActivity extends FragmentActivity {
 
             getPreferenceScreen().getSharedPreferences()
                     .registerOnSharedPreferenceChangeListener(this);
+        }
+
+        private void restoreUI() {
+            mCameraSound.setChecked(true);
+            //mPreviewFullSize.setChecked(DebugPropertyHelper.isPreviewFullSizeOn());
+        }
+
+        private void setDefaultPicturesize(CameraId cameraId, Facing cameraFacing) {
+            if (cameraId == null) return;
+            final String pictureSizeSettingKey = cameraFacing == OneCamera.Facing.FRONT ?
+                    Keys.KEY_PICTURE_SIZE_FRONT : Keys.KEY_PICTURE_SIZE_BACK;
+            final Rational aspectRatio = ResolutionUtil.ASPECT_RATIO_4x3;
+
+            FatalErrorHandler fatalErrorHandler = new FatalErrorHandlerImpl(this.getActivity());
+            try {
+                OneCameraCharacteristics cameraCharacteristics =
+                        mOneCameraManager.getOneCameraCharacteristics(cameraId);
+
+                final List<Size> supportedPictureSizes =
+                        ResolutionUtil.filterDisallowedListedSizes(
+                                cameraCharacteristics.getSupportedPictureSizes(ImageFormat.JPEG),
+                                "");
+                final Size fallbackPictureSize =
+                        ResolutionUtil.getLargestPictureSize(aspectRatio, supportedPictureSizes);
+                mSettingsManager.set(
+                        SettingsManager.SCOPE_GLOBAL,
+                        pictureSizeSettingKey,
+                        SettingsUtil.sizeToSettingString(fallbackPictureSize));
+                Log.d(TAG, "cameraId" + cameraId.getValue() + " setDefaultPicturesize = " + fallbackPictureSize);
+            } catch (OneCameraAccessException e) {
+                fatalErrorHandler.onGenericCameraAccessFailure();
+            }
         }
 
         /**

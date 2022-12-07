@@ -533,4 +533,12 @@
         <item>@drawable/shutter_button_background_still</item>
         <item>@drawable/shutter_button_background_still</item>
     </array>
+
+    <string-array name="pref_camera_whitebalance_entry" translatable="false">
+        <item>auto</item>
+        <item>cloudy-daylight</item>
+        <item>daylight</item>
+        <item>fluorescent</item>
+        <item>incandescent</item>
+    </string-array>
 </resources>

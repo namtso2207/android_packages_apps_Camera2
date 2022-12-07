@@ -81,7 +81,12 @@ public class Keys {
     public static final String KEY_SHOULD_SHOW_SETTINGS_BUTTON_CLING =
             "pref_should_show_settings_button_cling";
 
+    public static final String KEY_WHITEBALANCE = "pref_camera_whitebalance_key";
+    public static final String KEY_WHITEBALANCE_ENABLED =
+            "pref_camera_whitebalance_enable_key";
+
     public static final String KEY_CAMERA_SOUND = "pref_camera_sound_enable_key";
+
 
     public static final String KEY_HAS_SEEN_PERMISSIONS_DIALOGS = "pref_has_seen_permissions_dialogs";
 
@@ -185,6 +190,9 @@ public class Keys {
 
         settingsManager.setDefaults(KEY_CAMERA_SOUND, true);
 
+        settingsManager.setDefaults(KEY_WHITEBALANCE,
+            context.getString(R.string.pref_camera_whitebalance_default),
+            context.getResources().getStringArray(R.array.pref_camera_whitebalance_entry));
     }
 
     /**
@@ -192,9 +200,30 @@ public class Keys {
      * It's not necessary to set all defaults.
      */
     public static void setToDefaults(SettingsManager settingsManager, Context context) {
+        String[] cameraId = context.getResources().getStringArray(R.array.camera_id_entryvalues);
+        if (cameraId != null) {
+            for (int i = 0; i < cameraId.length; i++) {
+                if (Integer.valueOf(cameraId[i]) < 0) {
+                    // if an unopen camera i.e. negative ID is returned, which we've observed in
+                    // some automated scenarios, just return it as a valid separate scope
+                    // this could cause user issues, so log a stack trace noting the call path
+                    // which resulted in this scenario.
+                    continue;
+                }
+                String cameraScope = SettingsManager.CAMERA_SCOPE_PREFIX + cameraId[i];
+                if (settingsManager.isSet(cameraScope, KEY_WHITEBALANCE))
+                    settingsManager.setToDefault(cameraScope, KEY_WHITEBALANCE);
+            }
+        }
         if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_CAMERA_SOUND))
             settingsManager.setToDefault(SettingsManager.SCOPE_GLOBAL,
                 KEY_CAMERA_SOUND);
+
+        if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_RECORD_LOCATION))
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL, KEY_RECORD_LOCATION, false);
+
+        if (settingsManager.isSet(SettingsManager.SCOPE_GLOBAL, KEY_WHITEBALANCE_ENABLED))
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL, KEY_WHITEBALANCE_ENABLED, false);
     }
 
     /** Helper functions for some defined keys. */
