@@ -83,7 +83,7 @@ public class SimpleOneCameraFactory implements OneCameraFactory {
     private final int mImageFormat;
     private final int mMaxImageCount;
     private final ImageRotationCalculator mImageRotationCalculator;
-
+    
     private final Log.Tag TAG = new Log.Tag("SimpleOneCameraFactory");
 
     /**

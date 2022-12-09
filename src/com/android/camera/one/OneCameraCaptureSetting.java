@@ -40,7 +40,7 @@ public class OneCameraCaptureSetting {
     private final Observable<Integer> mExposureSetting;
     private final Observable<Boolean> mHdrSceneSetting;
     private final boolean mIsHdrPlusEnabled;
-
+    
     private static final Log.Tag TAG = new Log.Tag("OneCameraCaptureSetting");
 
     public static OneCameraCaptureSetting create(
@@ -99,7 +99,7 @@ public class OneCameraCaptureSetting {
     public Observable<OneCamera.PhotoCaptureParameters.Flash> getFlashSetting() {
         return mFlashSetting;
     }
-
+    
     public Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> getWhiteBalanceSetting() {
         return mWhiteBalanceSetting;
     }

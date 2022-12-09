@@ -19,14 +19,18 @@ package com.android.camera.settings;
 import android.Manifest;
 import android.app.ActionBar;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.ImageFormat;
+import android.hardware.Camera;
 import android.os.Bundle;
+import android.os.Environment;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceClickListener;
@@ -35,10 +39,13 @@ import android.preference.PreferenceGroup;
 import android.preference.PreferenceScreen;
 import androidx.fragment.app.FragmentActivity;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 import com.android.camera.FatalErrorHandler;
 import com.android.camera.FatalErrorHandlerImpl;
+import com.android.camera.Storage;
 import com.android.camera.app.CameraServicesImpl;
+import com.android.camera.debug.DebugPropertyHelper;
 import com.android.camera.debug.Log;
 import com.android.camera.device.CameraId;
 import com.android.camera.exif.Rational;
@@ -58,6 +65,7 @@ import com.android.camera2.R;
 import com.android.ex.camera2.portability.CameraAgentFactory;
 import com.android.ex.camera2.portability.CameraDeviceInfo;
 
+import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +85,7 @@ public class CameraSettingsActivity extends FragmentActivity {
     public static final String PREF_SCREEN_EXTRA = "pref_screen_extra";
     public static final String HIDE_ADVANCED_SCREEN = "hide_advanced";
     private static final int PERMISSION_REQUEST_CODE = 1;
+    public static final String HIDE_EX_SCREEN = "hide_ex";
     public static final String HIDE_WB_SCREEN = "hide_wb";
     private OneCameraManager mOneCameraManager;
 
@@ -86,6 +95,8 @@ public class CameraSettingsActivity extends FragmentActivity {
 
         FatalErrorHandler fatalErrorHandler = new FatalErrorHandlerImpl(this);
         boolean hideAdvancedScreen = false;
+        boolean hideExposureScreen = false;
+        boolean hideWbScreen = false;
 
         try {
             mOneCameraManager = OneCameraModule.provideOneCameraManager();
@@ -110,12 +121,27 @@ public class CameraSettingsActivity extends FragmentActivity {
             boolean isExposureCompensationSupportedByBackCamera = (backCameraId != null) &&
                     (mOneCameraManager.getOneCameraCharacteristics(backCameraId)
                             .isExposureCompensationSupported());
+            boolean isWbSupportedByFrontCamera = (frontCameraId != null) &&
+                    (mOneCameraManager.getOneCameraCharacteristics(frontCameraId)
+                            .isWhiteBalanceSupported());
+            boolean isWbSupportedByBackCamera = (backCameraId != null) &&
+                    (mOneCameraManager.getOneCameraCharacteristics(backCameraId)
+                            .isWhiteBalanceSupported());
+            
 
             // Hides the option if neither front and back camera support exposure compensation.
             if (!isExposureCompensationSupportedByFrontCamera &&
-                    !isExposureCompensationSupportedByBackCamera) {
+                    !isExposureCompensationSupportedByBackCamera
+                    && !isWbSupportedByBackCamera && !isWbSupportedByFrontCamera) {
                 hideAdvancedScreen = true;
             }
+            
+            if (!isExposureCompensationSupportedByFrontCamera
+                    && !isExposureCompensationSupportedByBackCamera)
+                hideExposureScreen = true;
+            
+            if (!isWbSupportedByBackCamera && !isWbSupportedByFrontCamera)
+                hideWbScreen = true;
         } catch (OneCameraAccessException e) {
             fatalErrorHandler.onGenericCameraAccessFailure();
         }
@@ -129,6 +155,8 @@ public class CameraSettingsActivity extends FragmentActivity {
         Bundle bundle = new Bundle(1);
         bundle.putString(PREF_SCREEN_EXTRA, prefKey);
         bundle.putBoolean(HIDE_ADVANCED_SCREEN, hideAdvancedScreen);
+        bundle.putBoolean(HIDE_EX_SCREEN, hideExposureScreen);
+        bundle.putBoolean(HIDE_WB_SCREEN, hideWbScreen);
         dialog.setArguments(bundle);
         getFragmentManager().beginTransaction().replace(android.R.id.content, dialog).commit();
     }
@@ -148,6 +176,7 @@ public class CameraSettingsActivity extends FragmentActivity {
 
         public static final String PREF_CATEGORY_RESOLUTION = "pref_category_resolution";
         public static final String PREF_CATEGORY_ADVANCED = "pref_category_advanced";
+        public static final String PREF_LAUNCH_HELP = "pref_launch_help";
         public static final String PREF_RESTORE_SETTINGS = "pref_restore_settings";
         private static final Log.Tag TAG = new Log.Tag("SettingsFragment");
         private static DecimalFormat sMegaPixelFormat = new DecimalFormat("##0.0");
@@ -155,6 +184,7 @@ public class CameraSettingsActivity extends FragmentActivity {
         private CameraDeviceInfo mInfos;
         private String mPrefKey;
         private boolean mHideAdvancedScreen;
+        private boolean mHideExScreen;
         private boolean mHideWbScreen;
         private boolean mGetSubPrefAsRoot = true;
 
@@ -164,6 +194,14 @@ public class CameraSettingsActivity extends FragmentActivity {
         private SettingsManager mSettingsManager;
         private ManagedSwitchPreference mCameraSound;
         private ManagedSwitchPreference mLocation;
+        private ManagedSwitchPreference mPreviewFullSize;
+        private ManagedSwitchPreference mFaceDetection;
+
+        private String[] mAntiBandingNames;
+        private boolean mFaceDetectionSupported;
+
+        private String SDCARD;
+        private String FLASH;
 
         private OneCameraManager mOneCameraManager;
 
@@ -174,13 +212,33 @@ public class CameraSettingsActivity extends FragmentActivity {
             if (arguments != null) {
                 mPrefKey = arguments.getString(PREF_SCREEN_EXTRA);
                 mHideAdvancedScreen = arguments.getBoolean(HIDE_ADVANCED_SCREEN);
+                mHideExScreen = arguments.getBoolean(HIDE_EX_SCREEN);
                 mHideWbScreen = arguments.getBoolean(HIDE_WB_SCREEN);
             }
             Context context = this.getActivity().getApplicationContext();
+            mInfos = CameraAgentFactory
+                    .getAndroidCameraAgent(context, CameraAgentFactory.CameraApi.API_1)
+                    .getCameraDeviceInfo();
+            loadSizes();
+
+            mCamcorderProfileNames = getResources().getStringArray(R.array.camcorder_profile_names);
+            mAntiBandingNames = getResources().getStringArray(R.array.pref_antibanding_names);
+
+            SDCARD = getActivity().getResources()
+                    .getString(R.string.pref_media_save_path_external_sd);
+            FLASH = getActivity().getResources()
+                    .getString(R.string.pref_media_save_path_flash);
+            
             addPreferencesFromResource(R.xml.camera_preferences);
+
             // Put in the summaries for the currently set values.
             final PreferenceScreen resolutionScreen =
                     (PreferenceScreen) findPreference(PREF_CATEGORY_RESOLUTION);
+            fillEntriesAndSummaries(resolutionScreen);
+            //setEntries(findPreference(Keys.KEY_ANTIBANDING));
+            //setSummary(findPreference(Keys.KEY_ANTIBANDING));
+            setSummary(findPreference(Keys.KEY_MEDIA_SAVE_PATH));
+
             PreferenceScreen advancedScreen =
                     (PreferenceScreen) findPreference(PREF_CATEGORY_ADVANCED);
 
@@ -189,6 +247,8 @@ public class CameraSettingsActivity extends FragmentActivity {
                 PreferenceScreen root = (PreferenceScreen) findPreference("prefscreen_top");
                 root.removePreference(advancedScreen);
             } else {
+                if (mHideExScreen)
+                    advancedScreen.removePreference(findPreference(Keys.KEY_EXPOSURE_COMPENSATION_ENABLED));
                 if (mHideWbScreen)
                     advancedScreen.removePreference(findPreference(Keys.KEY_WHITEBALANCE_ENABLED));
             }
@@ -209,11 +269,16 @@ public class CameraSettingsActivity extends FragmentActivity {
             CameraSettingsActivityHelper.addAdditionalPreferences(this, context);
             mGetSubPrefAsRoot = true;
 
-            mCamcorderProfileNames = getResources().getStringArray(R.array.camcorder_profile_names);
+            /*mCamcorderProfileNames = getResources().getStringArray(R.array.camcorder_profile_names);
+            mAntiBandingNames = getResources().getStringArray(R.array.pref_antibanding_names);
             mInfos = CameraAgentFactory
                     .getAndroidCameraAgent(context, CameraAgentFactory.CameraApi.API_1)
                     .getCameraDeviceInfo();
-            CameraAgentFactory.recycle(CameraAgentFactory.CameraApi.API_1);
+
+            SDCARD = getActivity().getResources()
+                    .getString(R.string.pref_media_save_path_external_sd);
+            FLASH = getActivity().getResources()
+                    .getString(R.string.pref_media_save_path_flash);*/
         }
 
         @Override
@@ -240,6 +305,7 @@ public class CameraSettingsActivity extends FragmentActivity {
             final MyDialogPreference restoreSettings =
                     (MyDialogPreference) findPreference(PREF_RESTORE_SETTINGS);
             restoreSettings.setPositiveButtonListener(new DialogInterface.OnClickListener() {
+                
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
                     // TODO Auto-generated method stub
@@ -251,11 +317,19 @@ public class CameraSettingsActivity extends FragmentActivity {
             });
             mCameraSound = (ManagedSwitchPreference) findPreference(Keys.KEY_CAMERA_SOUND);
             mLocation = (ManagedSwitchPreference) findPreference(Keys.KEY_RECORD_LOCATION);
+            //mPreviewFullSize = (ManagedSwitchPreference) findPreference(Keys.KEY_PREVIEW_FULL_SIZE_ENABLE);
+            mFaceDetection = (ManagedSwitchPreference) findPreference(Keys.KEY_FACE_DETECTION_ENABLED);
+            if (!mFaceDetectionSupported && mFaceDetection != null) {
+                getPreferenceScreen().removePreference(mFaceDetection);
+            }
 
             // Put in the summaries for the currently set values.
             final PreferenceScreen resolutionScreen =
                     (PreferenceScreen) findPreference(PREF_CATEGORY_RESOLUTION);
             fillEntriesAndSummaries(resolutionScreen);
+            //setEntries(findPreference(Keys.KEY_ANTIBANDING));
+            //setSummary(findPreference(Keys.KEY_ANTIBANDING));
+            setSummary(findPreference(Keys.KEY_MEDIA_SAVE_PATH));
             setPreferenceScreenIntent(resolutionScreen);
 
             final PreferenceScreen advancedScreen =
@@ -265,13 +339,28 @@ public class CameraSettingsActivity extends FragmentActivity {
                 setPreferenceScreenIntent(advancedScreen);
             }
 
+            /*Preference helpPref = findPreference(PREF_LAUNCH_HELP);
+            helpPref.setOnPreferenceClickListener(
+                    new OnPreferenceClickListener() {
+                        @Override
+                        public boolean onPreferenceClick(Preference preference) {
+                            new GoogleHelpHelper(activity).launchGoogleHelp();
+                            return true;
+                        }
+                    });*/
             getPreferenceScreen().getSharedPreferences()
                     .registerOnSharedPreferenceChangeListener(this);
+
+            registerMediaMountListener();
         }
 
         private void restoreUI() {
             mCameraSound.setChecked(true);
+            mLocation.setChecked(false);
             //mPreviewFullSize.setChecked(DebugPropertyHelper.isPreviewFullSizeOn());
+            if (mFaceDetectionSupported && mFaceDetection != null)
+                mFaceDetection.setChecked(true);
+			restoreMediaSavePath();
         }
 
         private void setDefaultPicturesize(CameraId cameraId, Facing cameraFacing) {
@@ -284,7 +373,7 @@ public class CameraSettingsActivity extends FragmentActivity {
             try {
                 OneCameraCharacteristics cameraCharacteristics =
                         mOneCameraManager.getOneCameraCharacteristics(cameraId);
-
+    
                 final List<Size> supportedPictureSizes =
                         ResolutionUtil.filterDisallowedListedSizes(
                                 cameraCharacteristics.getSupportedPictureSizes(ImageFormat.JPEG),
@@ -299,6 +388,13 @@ public class CameraSettingsActivity extends FragmentActivity {
             } catch (OneCameraAccessException e) {
                 fatalErrorHandler.onGenericCameraAccessFailure();
             }
+        }
+
+        @Override
+        public void onDestroy() {
+            // TODO Auto-generated method stub
+            super.onDestroy();
+            mSettingsManager = null;
         }
 
         /**
@@ -421,6 +517,7 @@ public class CameraSettingsActivity extends FragmentActivity {
             super.onPause();
             getPreferenceScreen().getSharedPreferences()
                     .unregisterOnSharedPreferenceChangeListener(this);
+            unregisterMediaMountListener();
         }
 
         @Override
@@ -434,7 +531,7 @@ public class CameraSettingsActivity extends FragmentActivity {
                     requestPermissions(
                             new String[] {Manifest.permission.ACCESS_COARSE_LOCATION,
                                     Manifest.permission.ACCESS_FINE_LOCATION},
-                            PERMISSION_REQUEST_CODE);
+                        PERMISSION_REQUEST_CODE);
                 }
             }
         }
@@ -457,6 +554,8 @@ public class CameraSettingsActivity extends FragmentActivity {
                 setEntriesForSelection(mPictureSizes.videoQualitiesBack.orNull(), listPreference);
             } else if (listPreference.getKey().equals(Keys.KEY_VIDEO_QUALITY_FRONT)) {
                 setEntriesForSelection(mPictureSizes.videoQualitiesFront.orNull(), listPreference);
+            } else if (listPreference.getKey().equals(Keys.KEY_ANTIBANDING)) {
+                listPreference.setEntries(mAntiBandingNames);
             }
         }
 
@@ -480,6 +579,23 @@ public class CameraSettingsActivity extends FragmentActivity {
                 setSummaryForSelection(mPictureSizes.videoQualitiesBack.orNull(), listPreference);
             } else if (listPreference.getKey().equals(Keys.KEY_VIDEO_QUALITY_FRONT)) {
                 setSummaryForSelection(mPictureSizes.videoQualitiesFront.orNull(), listPreference);
+            } else if (listPreference.getKey().equals(Keys.KEY_MEDIA_SAVE_PATH)) {
+                /*listPreference.setSummary(listPreference.getEntry());
+                String value = listPreference.getValue();
+                if (FLASH.equals(value))
+                    Storage.DIRECTORY = Storage.DEFAULT_DIRECTORY;
+                else if (SDCARD.equals(value)) {
+                    String state = Environment.getStorageState(new File(Storage.EXTENAL_SD));
+                    Log.i(TAG,"getSecondVolumeStorageState = " + state);
+                    if (!Environment.MEDIA_MOUNTED.equalsIgnoreCase(state)) {
+                        mSettingsManager.setToDefault(SettingsManager.SCOPE_GLOBAL, Keys.KEY_MEDIA_SAVE_PATH);
+                        restoreMediaSavePath();
+                        Toast.makeText(getActivity(), R.string.external_sd_unmounted, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Storage.DIRECTORY = Storage.EXTERNAL_DIRECTORY;
+                    }
+                }
+                Log.i(TAG, "setSummary Storage.DIRECTORY = " + Storage.DIRECTORY);*/
             } else {
                 listPreference.setSummary(listPreference.getEntry());
             }
@@ -582,6 +698,25 @@ public class CameraSettingsActivity extends FragmentActivity {
             PictureSizeLoader loader = new PictureSizeLoader(getActivity().getApplicationContext());
             mPictureSizes = loader.computePictureSizes();
             loader.release();
+
+            // Back camera.
+            boolean backCameraSupportFaceDetection = false;
+            int backCameraId = SettingsUtil.getCameraId(mInfos, SettingsUtil.CAMERA_FACING_BACK);
+            if (backCameraId >= 0) {
+                backCameraSupportFaceDetection = CameraPictureSizesCacher.isFaceDetectionSupported(backCameraId,
+                        this.getActivity().getApplicationContext());
+            }
+            // Front camera.
+            boolean frontCameraSupportFaceDetection = false;
+            int frontCameraId = SettingsUtil.getCameraId(mInfos, SettingsUtil.CAMERA_FACING_FRONT);
+            if (frontCameraId >= 0) {
+                frontCameraSupportFaceDetection = CameraPictureSizesCacher.isFaceDetectionSupported(frontCameraId,
+                        this.getActivity().getApplicationContext());
+            }
+            if (backCameraSupportFaceDetection || frontCameraSupportFaceDetection)
+                mFaceDetectionSupported = true;
+            else
+                mFaceDetectionSupported = false;
         }
 
         /**
@@ -598,6 +733,57 @@ public class CameraSettingsActivity extends FragmentActivity {
                     R.string.setting_summary_aspect_ratio_and_megapixels, numerator, denominator,
                     megaPixels);
             return result;
+        }
+
+        private void registerMediaMountListener() {
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(Intent.ACTION_MEDIA_REMOVED);
+            filter.addAction(Intent.ACTION_MEDIA_EJECT);
+            filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
+            filter.addAction(Intent.ACTION_MEDIA_UNMOUNTED);
+            filter.addDataScheme("file");
+            getActivity().registerReceiver(mMediaStateChangedReceiver, filter);
+            updateMediaSavePath();
+        }
+
+        private void unregisterMediaMountListener() {
+            try {
+                getActivity().unregisterReceiver(mMediaStateChangedReceiver);
+            } catch (Exception e) {
+                Log.e(TAG, "unregisterReceiver MediaStateChangedReceiver error:" + e);
+            }
+        }
+
+        private BroadcastReceiver mMediaStateChangedReceiver = new BroadcastReceiver(){
+            public void onReceive(Context context, Intent intent) {
+                Log.i(TAG, "receiver broadcast action = " + intent.getAction()
+                        + ", data = " + intent.getData().getPath());
+                updateMediaSavePath();
+            }
+        };
+
+        private void updateMediaSavePath() {
+            String value = mSettingsManager.getString(SettingsManager.SCOPE_GLOBAL, Keys.KEY_MEDIA_SAVE_PATH);
+            Log.i(TAG, "get mediapath value = " + value);
+            /*if (SDCARD.equals(value)) {
+                String state = Environment.getStorageState(new File(Storage.EXTENAL_SD));
+                Log.i(TAG,"getSecondVolumeStorageState = " + state);
+                if (!Environment.MEDIA_MOUNTED.equalsIgnoreCase(state)) {
+                    mSettingsManager.setToDefault(SettingsManager.SCOPE_GLOBAL, Keys.KEY_MEDIA_SAVE_PATH);
+                    restoreMediaSavePath();
+                }
+            }*/
+        }
+
+        private void restoreMediaSavePath() {
+            ListPreference preference = (ListPreference) findPreference(Keys.KEY_MEDIA_SAVE_PATH);
+            if (preference != null) {
+                preference.setValue(mSettingsManager.getString(SettingsManager.SCOPE_GLOBAL,
+                    Keys.KEY_MEDIA_SAVE_PATH));
+                preference.setSummary(preference.getEntry());
+            }
+            //Storage.DIRECTORY = Storage.DEFAULT_DIRECTORY;
+            //Log.i(TAG, "restore Storage.DIRECTORY = " + Storage.DIRECTORY);
         }
     }
 }

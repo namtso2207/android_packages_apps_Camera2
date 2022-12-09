@@ -145,8 +145,8 @@ public interface OneCameraCharacteristics {
      * @return true if this camera supports custom AutoExposure regions.
      */
     public boolean isAutoExposureSupported();
-
+    
     public boolean isWhiteBalanceSupported();
-
+    
     public Set<CameraCapabilities.WhiteBalance> getSupportedWhiteBalances();
 }

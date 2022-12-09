@@ -16,9 +16,9 @@
 
 package com.android.camera.one.v2;
 
-import com.android.ex.camera2.portability.CameraCapabilities.WhiteBalance;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.android.ex.camera2.portability.CameraCapabilities.WhiteBalance;
 import android.annotation.TargetApi;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
@@ -205,7 +205,9 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         }
         Range<Integer> compensationRange =
                 mCameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE);
-        return compensationRange.getLower() != 0 || compensationRange.getUpper() != 0;
+        boolean ae_lock_available = mCameraCharacteristics.get(
+                CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE);
+        return (compensationRange.getLower() != 0 || compensationRange.getUpper() != 0) && ae_lock_available;
     }
 
     @Override
@@ -267,7 +269,7 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         // Auto-Exposure is supported if the device supports one or more AE regions
         return maxAeRegions != null && maxAeRegions > 0;
     }
-
+    
     @Override
     public boolean isWhiteBalanceSupported() {
         // TODO Auto-generated method stub
@@ -277,7 +279,7 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         boolean awb_supported = SupportedWhiteBalances != null && SupportedWhiteBalances.size() > 0;
         return awb_lock_available && awb_supported;
     }
-
+    
     @Override
     public Set<WhiteBalance> getSupportedWhiteBalances() {
         // TODO Auto-generated method stub
@@ -294,7 +296,7 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         }
         return SupportedWhiteBalances;
     }
-
+    
     /**
      * Converts the API-related integer representation of the white balance to
      * the abstract representation.

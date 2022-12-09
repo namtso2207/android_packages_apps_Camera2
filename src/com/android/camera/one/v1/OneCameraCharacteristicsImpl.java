@@ -187,13 +187,13 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         // Custom AE is only supported on the back camera for legacy devices.
         return getCameraDirection() == Facing.BACK;
     }
-
+    
     @Override
     public boolean isWhiteBalanceSupported() {
         // TODO Auto-generated method stub
         return false;
     }
-
+    
     @Override
     public Set<WhiteBalance> getSupportedWhiteBalances() {
         // TODO Auto-generated method stub

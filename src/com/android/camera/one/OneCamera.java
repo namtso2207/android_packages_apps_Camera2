@@ -325,7 +325,7 @@ public interface OneCamera {
                 throw new IllegalArgumentException("Not a valid setting");
             }
         }
-
+        
         public static enum WhiteBalance {
             /**
              * @see {@link android.hardware.Camera.Parameters#WHITE_BALANCE_AUTO}.

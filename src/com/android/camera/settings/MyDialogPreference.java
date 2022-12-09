@@ -8,7 +8,7 @@ import android.util.Log;
 
 public class MyDialogPreference extends DialogPreference {
     private final String TAG = "MyDialogPreference";
-
+    
     private DialogInterface.OnClickListener mPositiveButtonListener;
 
     public MyDialogPreference(Context context, AttributeSet attrs) {
