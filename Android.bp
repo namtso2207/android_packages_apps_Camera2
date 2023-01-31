@@ -43,6 +43,7 @@ android_app {
     ],
 
     //LOCAL_SDK_VERSION := current
+    //sdk_version: "system_current",
 
     //LOCAL_PRODUCT_MODULE := true
 
