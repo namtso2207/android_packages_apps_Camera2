@@ -1036,7 +1036,7 @@ public class CameraActivity extends QuickActivity
                         mDataAdapter.refresh(sessionUri);
                         return;
                     }
-                    PhotoItem newData = mPhotoItemFactory.queryContentUri(contentUri);
+                    PhotoItem newData = null;/*mPhotoItemFactory.queryContentUri(contentUri);*/
 
                     // This can be null if e.g. a session is canceled (e.g.
                     // through discard panorama). It might be worth adding
@@ -1121,7 +1121,8 @@ public class CameraActivity extends QuickActivity
                     }
                     if (removeFromFilmstrip) {
                         mFatalErrorHandler.onMediaStorageFailure();
-                        mDataAdapter.removeAt(failedIndex);
+                        if (failedIndex > -1)
+                            mDataAdapter.removeAt(failedIndex);
                     }
                 }
 
@@ -1129,7 +1130,8 @@ public class CameraActivity extends QuickActivity
                 public void onSessionCanceled(Uri uri) {
                     Log.v(TAG, "onSessionCanceled:" + uri);
                     int failedIndex = mDataAdapter.findByContentUri(uri);
-                    mDataAdapter.removeAt(failedIndex);
+                    if (failedIndex > -1)
+                        mDataAdapter.removeAt(failedIndex);
                 }
 
                 @Override
@@ -1425,7 +1427,8 @@ public class CameraActivity extends QuickActivity
             @Override
             protected void onPostExecute(final FilmstripItem data) {
                 // TODO: Figure out why sometimes the data is aleady there.
-                mDataAdapter.addOrUpdate(data);
+                if (mDataAdapter != null && data != null)
+                    mDataAdapter.addOrUpdate(data);
 
                 // Legacy modules don't use CaptureSession, so we show the capture indicator when
                 // the item was safed.
@@ -1475,7 +1478,8 @@ public class CameraActivity extends QuickActivity
     }
 
     private void removeItemAt(int index) {
-        mDataAdapter.removeAt(index);
+        if (index > -1)
+            mDataAdapter.removeAt(index);
         if (mDataAdapter.getTotalNumber() >= 1) {
             showUndoDeletionBar();
         } else {
@@ -2372,7 +2376,7 @@ public class CameraActivity extends QuickActivity
                         }
                     });
                 } else {
-                    mDataAdapter.requestLoadNewPhotos();
+                    //mDataAdapter.requestLoadNewPhotos();
                 }
             }
         }
@@ -2393,8 +2397,27 @@ public class CameraActivity extends QuickActivity
                             }
                         });
                     } else {
-                        Log.d(TAG, "LocalImagesObserver changed mDataAdapter.requestLoadNewPhotos");
-                        mDataAdapter.requestLoadNewPhotos();
+                        //Log.d(TAG, "LocalImagesObserver changed mDataAdapter.requestLoadNewPhotos");
+                        //mDataAdapter.requestLoadNewPhotos();
+                    }
+                    updateStorageSpaceAndHint(null);
+                }
+            });
+            mLocalVideosObserver.setForegroundChangeListener(
+                    new FilmstripContentObserver.ChangeListener() {
+                @Override
+                public void onChange() {
+                    if (!mSecureCamera && !isCaptureIntent() && !mFilmstripVisible) {
+                        Log.d(TAG, "LocalVideosObserver changed mDataAdapter.requestLoad");
+                        mDataAdapter.requestLoad(new Callback<Void>() {
+                            @Override
+                            public void onCallback(Void result) {
+                                fillTemporarySessions();
+                            }
+                        });
+                    } else {
+                        //Log.d(TAG, "LocalImagesObserver changed mDataAdapter.requestLoadNewPhotos");
+                        //mDataAdapter.requestLoadNewPhotos();
                     }
                     updateStorageSpaceAndHint(null);
                 }
