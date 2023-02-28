@@ -280,6 +280,17 @@ public final class StateOpeningCamera extends StateImpl {
         /** Flash button UI spec. */
         bottomBarSpec.enableFlash = mCameraCharacteristics.isFlashSupported();
 
+        bottomBarSpec.enableWhiteBalance = mCameraCharacteristics.isWhiteBalanceSupported();
+        bottomBarSpec.supportedWhiteBalances = mCameraCharacteristics.getSupportedWhiteBalances();
+        bottomBarSpec.whiteBalanceSetCallback =
+            new CameraAppUI.BottomBarUISpec.WhiteBalanceSetCallback() {
+                @Override
+                public void setWhiteBalance(String value) {
+                    mResourceConstructed.get().getSettingsManager().set(
+                            mCameraSettingsScope, Keys.KEY_WHITEBALANCE, value);
+            }
+        };
+
         /** Setup exposure compensation */
         bottomBarSpec.isExposureCompensationSupported = mCameraCharacteristics
                 .isExposureCompensationSupported();

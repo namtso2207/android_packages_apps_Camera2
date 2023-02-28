@@ -162,7 +162,14 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
 
     @Override
     public void removeAt(int index) {
+        boolean isVideo = mFilmstripItems.get(index).getData().getMimeType().contains("video");
+        String title = mFilmstripItems.get(index).getData().getTitle();
         FilmstripItem d = mFilmstripItems.remove(index);
+        if (isVideo) {
+            mVideoItemFactory.deleteForAllVideo(title);
+        } else {
+            mPhotoItemFactory.deleteForAllPhoto(title);
+        }
         if (d == null) {
             return;
         }
@@ -336,11 +343,11 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
         @Override
         protected List<PhotoItem> doInBackground(ContentResolver... contentResolvers) {
             mLoadingNewPhoto = true;
-            if (mMinPhotoId != FilmstripItemBase.QUERY_ALL_MEDIA_ID) {
+            /*if (mMinPhotoId != FilmstripItemBase.QUERY_ALL_MEDIA_ID) {
                 Log.v(TAG, "updating media metadata with photos newer than id: " + mMinPhotoId);
                 final ContentResolver cr = contentResolvers[0];
                 return mPhotoItemFactory.queryAll(PhotoDataQuery.CONTENT_URI, mMinPhotoId);
-            }
+            }*/
             return new ArrayList<>(0);
         }
 
