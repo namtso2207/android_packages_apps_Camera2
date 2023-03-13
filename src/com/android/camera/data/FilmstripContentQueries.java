@@ -73,21 +73,9 @@ public class FilmstripContentQueries {
             if (cursor != null) {
                 if (mAllImagesCount ==0) {
                     while (cursor.moveToNext()) {
-                        long id = cursor.getLong(PhotoDataQuery.COL_ID);
-                        String title = cursor.getString(PhotoDataQuery.COL_TITLE);
-                        PhotoItem item = factory.get(cursor);
-                        if (item != null) {
-                            if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto item:" + item.toString());
-                            mAllImagesResult.add(item);
-                        } else {
-                            final int dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
-                            Log.e(TAG, "Error loading data:" + cursor.getString(dataIndex));
-                        }
-                    }
-                } else {
-                    if (cursor.getCount() != 0) {
-                        if (cursor.getCount() > mAllImagesCount) {
-                            cursor.moveToFirst();
+                        int size = cursor.getInt(PhotoDataQuery.COL_SIZE);
+                        if (isDebugOn)Log.e(TAG, "---zc forAllCameraPathPhoto size1:" + size);
+                        if (size > 0) {
                             PhotoItem item = factory.get(cursor);
                             if (item != null) {
                                 if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto item:" + item.toString());
@@ -96,9 +84,15 @@ public class FilmstripContentQueries {
                                 final int dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
                                 Log.e(TAG, "Error loading data:" + cursor.getString(dataIndex));
                             }
-                        } else {
-                            mAllImagesResult.clear();
-                            while (cursor.moveToNext()) {
+                        }
+                    }
+                } else {
+                    if (cursor.getCount() != 0) {
+                        if (cursor.getCount() > mAllImagesCount) {
+                            cursor.moveToFirst();
+                            int size = cursor.getInt(PhotoDataQuery.COL_SIZE);
+                            if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto size2:" + size);
+                            if (size > 0) {
                                 PhotoItem item = factory.get(cursor);
                                 if (item != null) {
                                     if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto item:" + item.toString());
@@ -106,6 +100,22 @@ public class FilmstripContentQueries {
                                 } else {
                                     final int dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
                                     Log.e(TAG, "Error loading data:" + cursor.getString(dataIndex));
+                                }
+                            }
+                        } else {
+                            mAllImagesResult.clear();
+                            while (cursor.moveToNext()) {
+                                int size = cursor.getInt(PhotoDataQuery.COL_SIZE);
+                                if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto size3:" + size);
+                                if (size > 0) {
+                                    PhotoItem item = factory.get(cursor);
+                                    if (item != null) {
+                                        if (isDebugOn) Log.e(TAG, "---zc forAllCameraPathPhoto item:" + item.toString());
+                                        mAllImagesResult.add(item);
+                                    } else {
+                                        final int dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
+                                        Log.e(TAG, "Error loading data:" + cursor.getString(dataIndex));
+                                    }
                                 }
                             }
                         }
